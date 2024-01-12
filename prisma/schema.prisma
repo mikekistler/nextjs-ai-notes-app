@@ -11,7 +11,7 @@ datasource db {
 }
 
 model Note {
-  id        String  @id @default(cuid()) @map("_id")
+  id        String  @id @default(auto()) @map("_id") @db.ObjectId
   title     String
   content   String?
   userId    String
