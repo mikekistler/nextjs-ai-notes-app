@@ -1,12 +1,19 @@
+"use client";
+
 import Link from "next/link";
 import Image from "next/image";
 import logo from "@/assets/logo.png";
 import { UserButton } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
+import { useState } from "react";
+import AddNoteDialog from "@/components/AddNoteDialog";
 
 export default function NavBar() {
+  const [showAddNoteDialog, setShowAddNoteDialog] = useState(false);
+
   return (
+    <>
     <div className="p-4 shadow">
       <div className="m-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
         <span>Element 1</span>
@@ -21,12 +28,16 @@ export default function NavBar() {
               elements: { avatarBox: { width: "2.5rem", height: "2.5rem" } },
             }}
           />
-          <Button>
+          <Button onClick={() => setShowAddNoteDialog(true)}>
             <Plus size={20} className="mr-2" />
             Add Note
           </Button>
         </div>
       </div>
     </div>
+    <AddNoteDialog
+      open={showAddNoteDialog}
+      setOpen={setShowAddNoteDialog} />
+    </>
   );
 }
