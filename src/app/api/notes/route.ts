@@ -1,4 +1,6 @@
+import { notesIndex } from "@/lib/db/pinecone";
 import prisma from "@/lib/db/prisma";
+import { getEmbedding } from "@/lib/openai";
 import {
   createNoteSchema,
   deleteNoteSchema,
@@ -25,12 +27,27 @@ export async function POST(req: Request) {
 
     const { title, content } = parseResult.data;
 
-    const note = await prisma.note.create({
-      data: {
-        title,
-        content,
-        userId,
-      },
+    const embedding = await getEmbeddingForNote(title, content);
+
+    const note = await prisma.$transaction(async (tx) => {
+      const note = await tx.note.create({
+        data: {
+          title,
+          content,
+          userId,
+        },
+      });
+
+      // If this upsert fails, the transaction will abort and create will be rolled back
+      await notesIndex.upsert([
+        {
+          id: note.id,
+          values: embedding,
+          metadata: { userId },
+        },
+      ]);
+
+      return note;
     });
 
     return Response.json({ note }, { status: 201 });
@@ -69,14 +86,29 @@ export async function PUT(req: Request) {
       return Response.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const updatedNote = await prisma.note.update({
-      where: {
-        id: id,
-      },
-      data: {
-        title,
-        content,
-      },
+    const embedding = await getEmbeddingForNote(title, content);
+
+    const updatedNote = await prisma.$transaction(async (tx) => {
+      const updatedNote = await prisma.note.update({
+        where: {
+          id: id,
+        },
+        data: {
+          title,
+          content,
+        },
+      });
+
+      // If this upsert fails, the transaction will abort and create will be rolled back
+      await notesIndex.upsert([
+        {
+          id: id,
+          values: embedding,
+          metadata: { userId },
+        },
+      ]);
+
+      return updatedNote;
     });
 
     return Response.json({ updatedNote }, { status: 200 });
@@ -115,10 +147,14 @@ export async function DELETE(req: Request) {
       return Response.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    await prisma.note.delete({
-      where: {
-        id: id,
-      },
+    await prisma.$transaction(async (tx) => {
+      await prisma.note.delete({
+        where: {
+          id: id,
+        },
+      });
+      
+      await notesIndex.deleteOne(id);
     });
 
     return new Response(null, { status: 204 });
@@ -126,4 +162,8 @@ export async function DELETE(req: Request) {
     console.error(err);
     return Response.json({ error: "Internal server error" }, { status: 500 });
   }
+}
+
+async function getEmbeddingForNote(title: string, content: string | undefined) {
+  return getEmbedding(title + (content ? "\n\n" + content : ""));
 }
